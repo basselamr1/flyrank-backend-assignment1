@@ -1,18 +1,30 @@
+from ast import Dict
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
-app = FastAPI()
+app = FastAPI(
+    title = "Task Management API", 
+    description = "A complete CRUD API for managing your daily tasks."
+)
 
 class Task(BaseModel):
-    title:str
-    done: bool = False
+    title:str | None = Field(default = None, min_length=1, description="Title of the task.")
+    done: bool | None = Field(default = False, description= "Status of the task if done or not.")
+
+class TaskUpdate(BaseModel):
+    title: str | None = Field( default=None,min_length=1)
+    done: bool | None = None
     
-db = [
-    {"id": 0, "title": "Task 1", "done": True}, 
-    {"id": 1, "title": "Task 2", "done": False}, 
-    {"id": 2, "title": "Task 3", "done": False}, 
-    {"id": 3, "title": "Task 4", "done": False}
-    ]
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "Invalid input data format or missing required fields."}
+    )
+
+db: list[Dict] = []
 
 @app.get("/")
 async def get_api_description():
@@ -22,13 +34,13 @@ async def get_api_description():
 async def get_server_status():
     return {"status": "ok"}
 
-@app.get('/tasks')
+@app.get('/tasks', status_code= status.HTTP_200_OK)
 async def get_tasks():
     return db
 
-@app.get('/tasks/{id}')
-async def get_task(id):
-    task = next((item for item in db if item["id"] == id), None)
+@app.get('/tasks/{id}', status_code= status.HTTP_200_OK)
+async def get_task(id:int):
+    task = next((item for item in db if item['id'] == id), None)
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -55,34 +67,41 @@ async def add_task(task: Task):
     db.append(new_task)
     return new_task, db
 
-@app.put('/tasks/{id}')
-async def update_task(task:Task, id):
-    if int(id) > len(db):
+@app.put('/tasks/{id}', status_code= status.HTTP_200_OK)
+async def update_task(task:TaskUpdate, id:int):
+    existing_task = next((item for item in db if item['id'] == id), None)
+    if existing_task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail=f"Task with id: {id} not found."
         )
-    if task.title =="" and task.done == "":
+    if task.title is None and task.done is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail=f"Empty body: You must provide a title or done status."
         )
-    existing_task = db[int(id)-1]
-    if task.title is not None:
+
+    if task.title is not None and task.done is not None:
         existing_task['title'] = task.title
+        existing_task['done'] = task.done
     
-    if task.done is not None:
+    if task.title is not None and task.done is None:
+        existing_task['title'] = task.title
+
+    if task.title is None and task.done is not None:
         existing_task['done'] = task.done
     
     return existing_task, db
 
 @app.delete('/tasks/{id}',status_code= status.HTTP_204_NO_CONTENT)
-async def delete_task(id):
-    if int(id) > len(db):
+async def delete_task(id: int):
+    task_index = next(
+        (index for index, item in enumerate(db) if item["id"] == id), None)
+
+    if task_index is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Unknown task id."
         )
-    del db[int(id)-1]
-    return db
+    del db[task_index]
     
