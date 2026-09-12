@@ -38,7 +38,7 @@ async def get_task(id):
 
 @app.post('/tasks', status_code=status.HTTP_201_CREATED)
 async def add_task(task: Task):
-    new_id = max((item['id'] for item in db), default = 0) +1
+    new_id = max((item['id'] for item in db), default = 0) + 1
 
     if(not task.title or task.title==""):
          raise HTTPException(
@@ -54,3 +54,35 @@ async def add_task(task: Task):
 
     db.append(new_task)
     return new_task, db
+
+@app.put('/tasks/{id}')
+async def update_task(task:Task, id):
+    if int(id) > len(db):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Task with id: {id} not found."
+        )
+    if task.title =="" and task.done == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Empty body: You must provide a title or done status."
+        )
+    existing_task = db[int(id)-1]
+    if task.title is not None:
+        existing_task['title'] = task.title
+    
+    if task.done is not None:
+        existing_task['done'] = task.done
+    
+    return existing_task, db
+
+@app.delete('/tasks/{id}',status_code= status.HTTP_204_NO_CONTENT)
+async def delete_task(id):
+    if int(id) > len(db):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Unknown task id."
+        )
+    del db[int(id)-1]
+    return db
+    
